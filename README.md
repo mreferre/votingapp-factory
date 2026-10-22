@@ -56,7 +56,7 @@ aws apprunner create-service --cli-input-json file://apprunner_cli_input.json
 
 #### CloudFormation EC2 deployment
 
-The [cloudformation/votingapp-ec2.yaml](/cloudformation/votingapp-ec2.yaml) template deploys this application on a single EC2 instance and it is self-contained: it creates the networking (VPC, internet gateway, public subnet, route table, security group), a DynamoDB table that a custom resource initializes with the four restaurant items, the IAM roles and a t3.micro instance (Amazon Linux 2023) that installs Python, clones this repository and runs the app under `systemd`. The stack creation completes only when the application is up (via `cfn-signal`) and rolls back otherwise.
+The [cloudformation/votingapp-ec2.yaml](/cloudformation/votingapp-ec2.yaml) template deploys this application on a single EC2 instance and it is self-contained: it creates the networking (VPC, internet gateway, public subnet, route table, security group), a DynamoDB table that a custom resource initializes with the four restaurant items, the IAM roles and a t3.micro instance (Amazon Linux 2023) that installs Python, clones this repository and runs the app under `systemd`. The stack creation completes only when the application is up and answering HTTP requests (verified with `cfn-signal`) and rolls back otherwise.
 
 To deploy (requires AWS CLI credentials in the region of your choice):
 

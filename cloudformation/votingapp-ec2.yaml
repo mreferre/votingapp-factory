@@ -13,6 +13,7 @@ Parameters:
   InstanceType:
     Type: String
     Default: t3.micro
+    AllowedValues: [t3.micro, t3.small, t3.medium, t3.large, m5.large, m5.xlarge]
     Description: EC2 instance type running the application.
   AppPort:
     Type: Number
@@ -151,12 +152,11 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-table-seeder:*"
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
 
   TableSeederFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub "${AWS::StackName}-table-seeder"
       Runtime: python3.12
       Handler: index.handler
       Timeout: 60
@@ -267,14 +267,35 @@ Resources:
       SubnetId: !Ref PublicSubnet
       SecurityGroupIds:
         - !GetAtt AppSecurityGroup.GroupId
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
       Tags:
         - Key: Name
           Value: !Sub "${AWS::StackName}-votingapp"
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash -x
-          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource AppInstance --region ${AWS::Region}
-          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource AppInstance --region ${AWS::Region}
+          INIT_EXIT=0
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource AppInstance --region ${AWS::Region} || INIT_EXIT=$?
+
+          APP_UP=0
+          if [ "$INIT_EXIT" -eq 0 ]; then
+            for i in $(seq 1 60); do
+              if curl -sf "http://127.0.0.1:${AppPort}/" > /dev/null; then
+                APP_UP=1
+                break
+              fi
+              sleep 2
+            done
+          fi
+
+          if [ "$INIT_EXIT" -eq 0 ] && [ "$APP_UP" -eq 1 ]; then
+            /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource AppInstance --region ${AWS::Region}
+          else
+            /opt/aws/bin/cfn-signal -e 1 --stack ${AWS::StackName} --resource AppInstance --region ${AWS::Region}
+          fi
+          # Force instance replacement on any app-setting change: ${AppPort} ${RepoBranch} ${TableName} ${CPUStressFactor} ${MemStressFactor}
     Metadata:
       AWS::CloudFormation::Init:
         configSets:
@@ -295,6 +316,7 @@ Resources:
 
                 [Service]
                 Type=simple
+                User=ec2-user
                 WorkingDirectory=/opt/votingapp
                 EnvironmentFile=/opt/votingapp/votingapp.env
                 EnvironmentFile=/opt/votingapp/cpu-stress.env
