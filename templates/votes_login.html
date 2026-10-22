@@ -1,0 +1,16 @@
+{% extends "votes_base.html" %}
+{% block title %}Sign in · Voting App{% endblock %}
+{% block content %}
+<main class="login-wrap">
+  <form class="login-card" method="post" action="{{ url_for('votes_login') }}">
+    <h1>Restaurant Voting</h1>
+    <p class="login-hint">This page is password protected. Enter the voting page password to continue.</p>
+    {% if error %}
+    <p class="login-error" role="alert">{{ error }}</p>
+    {% endif %}
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+    <button type="submit">Sign in</button>
+  </form>
+</main>
+{% endblock %}

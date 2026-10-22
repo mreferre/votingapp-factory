@@ -1,0 +1,31 @@
+{% extends "votes_base.html" %}
+{% block title %}Votes · Voting App{% endblock %}
+{% block content %}
+<header class="votes-header">
+  <div>
+    <h1>Restaurant Voting</h1>
+    <p class="votes-subtitle">Pick where the team should eat and watch the votes roll in.</p>
+  </div>
+  <div class="votes-header-actions">
+    <button type="button" class="votes-refresh" data-refresh>Refresh counts</button>
+    <a class="votes-logout" href="{{ url_for('votes_logout') }}">Log out</a>
+  </div>
+</header>
+<main class="votes-main">
+  <p class="votes-status" role="alert" data-status hidden></p>
+  <section class="votes-grid" data-votes-grid aria-label="Restaurants and their votes">
+    {% for restaurant in restaurants %}
+    <article class="vote-card">
+      <div class="vote-emoji" aria-hidden="true">{{ restaurant.emoji }}</div>
+      <h2 class="vote-name">{{ restaurant.display_name }}</h2>
+      <p class="vote-count" aria-live="polite">
+        <span data-count="{{ restaurant.name }}">{{ restaurant.votes }}</span>
+        <span class="vote-count-label">votes</span>
+      </p>
+      <button type="button" class="vote-btn" data-restaurant="{{ restaurant.name }}">Vote</button>
+    </article>
+    {% endfor %}
+  </section>
+</main>
+<script src="{{ url_for('static', filename='votes.js') }}" defer></script>
+{% endblock %}

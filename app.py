@@ -1,6 +1,7 @@
 import os
+import hmac
 
-from flask import Flask
+from flask import Flask, render_template, request, session, redirect, url_for, abort
 from flask_cors import CORS, cross_origin
 from random import randrange
 import simplejson as json
@@ -110,6 +111,63 @@ def getheavyvotes():
     pool = Pool(processes)
     pool.map(f, range(processes))
     return string_votes
+
+# --- Password-protected /votes page ---
+# The page fails closed: it is served only when both FLASK_SECRET_KEY (signs the
+# session cookie) and VOTES_PAGE_PASSWORD (login) are set, otherwise it returns 404.
+
+app.secret_key = os.getenv('FLASK_SECRET_KEY')
+votes_page_password = os.getenv('VOTES_PAGE_PASSWORD')
+
+restaurant_names = ('outback', 'bucadibeppo', 'ihop', 'chipotle')
+
+restaurant_details = {
+    'outback': {'display_name': 'Outback Steakhouse', 'emoji': '\U0001f969'},
+    'bucadibeppo': {'display_name': 'Buca di Beppo', 'emoji': '\U0001f35d'},
+    'ihop': {'display_name': 'IHOP', 'emoji': '\U0001f95e'},
+    'chipotle': {'display_name': 'Chipotle', 'emoji': '\U0001f32f'},
+}
+
+def votes_page_enabled():
+    return bool(app.secret_key) and bool(votes_page_password)
+
+@app.route('/votes/login', methods=['GET', 'POST'])
+def votes_login():
+    if not votes_page_enabled():
+        abort(404)
+    error = None
+    if request.method == 'POST':
+        submitted_password = request.form.get('password', '')
+        if hmac.compare_digest(submitted_password.encode('utf-8'), votes_page_password.encode('utf-8')):
+            session['votes_authenticated'] = True
+            return redirect(url_for('votes'))
+        error = 'Incorrect password. Please try again.'
+    status = 401 if error else 200
+    return render_template('votes_login.html', error=error), status
+
+@app.route('/votes')
+def votes():
+    if not votes_page_enabled():
+        abort(404)
+    if not session.get('votes_authenticated'):
+        return redirect(url_for('votes_login'))
+    restaurant_votes = []
+    for name in restaurant_names:
+        try:
+            count = int(readvote(name))
+        except KeyError:
+            # a restaurant without a DynamoDB item shows as 0 votes
+            count = 0
+        details = restaurant_details[name]
+        restaurant_votes.append({'name': name, 'display_name': details['display_name'], 'emoji': details['emoji'], 'votes': count})
+    return render_template('votes.html', restaurants=restaurant_votes)
+
+@app.route('/votes/logout')
+def votes_logout():
+    if not votes_page_enabled():
+        abort(404)
+    session.clear()
+    return redirect(url_for('votes_login'))
 
 if __name__ == '__main__':
    app.run(host=os.getenv('IP', '0.0.0.0'), port=int(os.getenv('PORT', 8080)))

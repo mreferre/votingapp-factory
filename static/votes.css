@@ -1,0 +1,275 @@
+/* Styles for the password-protected /votes pages. Self-contained: no web fonts or CDNs. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --text: #16202c;
+  --muted: #5b6b7c;
+  --accent: #e8542f;
+  --accent-strong: #c9431f;
+  --border: #dbe2ec;
+  --error: #b3261e;
+  --error-bg: rgba(179, 38, 30, 0.08);
+  --shadow: 0 10px 30px rgba(22, 32, 44, 0.08);
+  --radius: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #10161f;
+    --surface: #1a2330;
+    --text: #eef2f7;
+    --muted: #97a5b6;
+    --border: #2a3646;
+    --error: #ff9a8f;
+    --error-bg: rgba(255, 154, 143, 0.12);
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background:
+    radial-gradient(1100px 500px at 85% -10%, rgba(232, 84, 47, 0.12), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(47, 108, 232, 0.1), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* Login page */
+
+.login-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-card {
+  width: min(400px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 32px;
+  display: grid;
+  gap: 12px;
+}
+
+.login-card h1 {
+  margin: 0 0 4px;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+.login-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.login-error {
+  margin: 0;
+  color: var(--error);
+  background: var(--error-bg);
+  border: 1px solid var(--error);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.login-card label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.login-card input {
+  font: inherit;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.login-card button,
+.vote-btn {
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 10px;
+  padding: 11px 16px;
+  cursor: pointer;
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+
+.login-card button:hover,
+.vote-btn:hover {
+  background: var(--accent-strong);
+}
+
+.login-card button:active,
+.vote-btn:active {
+  transform: translateY(1px);
+}
+
+.login-card button:disabled,
+.vote-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+  transform: none;
+}
+
+.login-card input:focus-visible,
+.login-card button:focus-visible,
+.vote-btn:focus-visible,
+.votes-refresh:focus-visible,
+.votes-logout:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Votes page */
+
+.votes-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 40px 24px 8px;
+}
+
+.votes-header h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  letter-spacing: -0.03em;
+}
+
+.votes-subtitle {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.votes-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.votes-refresh {
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: border-color 150ms ease;
+}
+
+.votes-refresh:hover {
+  border-color: var(--muted);
+}
+
+.votes-logout {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  padding: 8px 4px;
+}
+
+.votes-logout:hover {
+  text-decoration: underline;
+}
+
+.votes-main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 16px 24px 48px;
+}
+
+.votes-status {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--error);
+  color: var(--error);
+  background: var(--error-bg);
+  font-weight: 600;
+}
+
+.votes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+}
+
+.vote-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  text-align: center;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.vote-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 36px rgba(22, 32, 44, 0.14);
+}
+
+.vote-emoji {
+  font-size: 2.4rem;
+}
+
+.vote-name {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.vote-count {
+  margin: 6px 0 10px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.vote-count span[data-count] {
+  font-size: 2.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.vote-count-label {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.vote-btn {
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

@@ -17,6 +17,14 @@ This is a high level diagram of the application architecture:
 
 ![votingapp-architecture](/images/votingapp-architecture.png)
 
+### Password-protected voting page
+
+The app also serves a web UI at `/votes`. It shows the four restaurants with their current votes in a grid and lets you vote with a click, without reloading the page. The `Refresh counts` button re-reads the votes from DynamoDB.
+
+The page is password protected. Opening `/votes` redirects you to a login page. Enter the password set in `VOTES_PAGE_PASSWORD` to get a session, and use `Log out` in the page header to end it.
+
+The page fails closed: the `/votes` routes return `404 Not Found` unless **both** `VOTES_PAGE_PASSWORD` and `FLASK_SECRET_KEY` are set. Set them in the App Runner service configuration (or in the `env` section of `apprunner.yaml`). Do not commit real values to the repository.
+
 ### How to set up the application
 
 This is a classic Python application. To use it with AWS App Runner you can build the image upfront (a `Dockerfile` is provided) and push it to ECR or you can provide the source code directly. If you are deploying the application with AWS App Runner, the root of the repository contains the `apprunner.yaml` file used to configure the required parameters for runtime. The requirement to deploy the application is to create and initialize the DynamoDB table and set the proper permissions. In the [preparation](/preparation) folder there are instructions and code to make this happen. 
@@ -58,6 +66,7 @@ aws apprunner create-service --cli-input-json file://apprunner_cli_input.json
 
 - `DDB_AWS_REGION` this variable is required and needs to be set to the region of the DynamoDB table.
 - `DDB_TABLE_NAME` this variable is optional and contains the DynamoDB table name (default: `votingapp-restaurants`)
+- `VOTES_PAGE_PASSWORD` and `FLASK_SECRET_KEY` are required together to enable the password-protected `/votes` page (see above). `FLASK_SECRET_KEY` signs the session cookie.
 - `MEMSTRESSFACTOR` and `CPUSTRESSFACTOR` are optional and governs the behaviour of the artificial load (experimental)
 - `OTEL_PYTHON_ID_GENERATOR` and `OTEL_PROPAGATORS` are required to enable the X-Ray integration
 - `OTEL_PYTHON_DISABLED_INSTRUMENTATIONS` and `OTEL_RESOURCE_ATTRIBUTES` are optional and relates to the X-Ray integration
@@ -71,7 +80,6 @@ This app has been created to test deployments to AWS App Runner. However, this i
 - the `getheavyvotes` API doesn't really work as expected and it's WIP 
 - the script should ideally be turned into a CFN template with custom resources to initialize the DDB table
 - Even more ideally this could/should be all wrapped (App Runner service + DDB table) with a Copilot artifact
-- A simple UI to vote and query the votes is in the works
 - the Flask server doesn't have debug enabled. To do so add the following variable: `FLASK_ENV-development` (please note this variable is [incompatible with OpenTelemetry](https://github.com/open-telemetry/opentelemetry-python-contrib/issues/546) so the X-Ray integration won't work until this will get fixed)
 
 
