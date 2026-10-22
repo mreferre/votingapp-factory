@@ -8,7 +8,9 @@
   </div>
   <div class="votes-header-actions">
     <button type="button" class="votes-refresh" data-refresh>Refresh counts</button>
-    <a class="votes-logout" href="{{ url_for('votes_logout') }}">Log out</a>
+    <form method="post" action="{{ url_for('votes_logout') }}">
+      <button type="submit" class="votes-logout">Log out</button>
+    </form>
   </div>
 </header>
 <main class="votes-main">

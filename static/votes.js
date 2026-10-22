@@ -26,7 +26,7 @@
       if (!response.ok) throw new Error(`vote failed with status ${response.status}`);
       setCount(button.dataset.restaurant, await response.text());
       showStatus('');
-    } catch (error) {
+    } catch {
       showStatus('Your vote could not be recorded. Please try again.');
     } finally {
       button.disabled = false;
@@ -42,7 +42,7 @@
           setCount(name, value);
         }
         showStatus('');
-      } catch (error) {
+      } catch {
         showStatus('The counts could not be refreshed. Please try again.');
       }
     });

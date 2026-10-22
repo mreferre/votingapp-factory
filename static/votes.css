@@ -187,8 +187,12 @@ body {
 }
 
 .votes-logout {
+  font: inherit;
   color: var(--accent);
   font-weight: 600;
+  background: none;
+  border: none;
+  cursor: pointer;
   text-decoration: none;
   padding: 8px 4px;
 }

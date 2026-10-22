@@ -132,7 +132,7 @@ def votes():
         restaurant_votes.append({'name': name, 'display_name': details['display_name'], 'emoji': details['emoji'], 'votes': count})
     return render_template('votes.html', restaurants=restaurant_votes)
 
-@app.route('/votes/logout')
+@app.route('/votes/logout', methods=['POST'])
 def votes_logout():
     if not votes_page_enabled():
         abort(404)
