@@ -1,0 +1,385 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Self-contained deployment of the votingapp on a single EC2 instance
+  (Amazon Linux 2023, application run under systemd) with a DynamoDB table
+  and a Lambda-backed custom resource that seeds the four restaurant items.
+
+Parameters:
+  TableName:
+    Type: String
+    Default: votingapp-restaurants
+    Description: Name of the DynamoDB table holding the vote counters.
+    AllowedPattern: '[a-zA-Z0-9_.-]{3,255}'
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues: [t3.micro, t3.small, t3.medium, t3.large, m5.large, m5.xlarge]
+    Description: EC2 instance type running the application.
+  AppPort:
+    Type: Number
+    Default: 8080
+    Description: Port the application listens on. Also opened in the security group.
+  AllowedCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR range allowed to reach the application port.
+  RepoBranch:
+    Type: String
+    Default: master
+    Description: Branch of mreferre/votingapp-factory deployed on the instance.
+  CPUStressFactor:
+    Type: String
+    Default: ""
+    Description: Optional CPUSTRESSFACTOR passed to the app. Leave empty to keep the application default (1).
+  MemStressFactor:
+    Type: String
+    Default: ""
+    Description: Optional MEMSTRESSFACTOR passed to the app. Leave empty to keep the application default (1).
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Amazon Linux 2023 AMI, resolved from the public SSM parameter.
+
+Conditions:
+  HasCPUStressFactor: !Not [!Equals [!Ref CPUStressFactor, ""]]
+  HasMemStressFactor: !Not [!Equals [!Ref MemStressFactor, ""]]
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-vpc"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-igw"
+
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-subnet"
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-rt"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "Allow inbound TCP ${AppPort} to the voting app"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref AppPort
+          ToPort: !Ref AppPort
+          CidrIp: !Ref AllowedCidr
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-app-sg"
+
+  VotingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref TableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: name
+          AttributeType: S
+      KeySchema:
+        - AttributeName: name
+          KeyType: HASH
+
+  TableSeederFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: seed-voting-table
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:DeleteItem
+                Resource: !GetAtt VotingTable.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+
+  TableSeederFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 60
+      Role: !GetAtt TableSeederFunctionRole.Arn
+      Code:
+        ZipFile: |
+          import traceback
+
+          import boto3
+          import cfnresponse
+          from botocore.exceptions import ClientError
+
+          RESTAURANTS = ["outback", "bucadibeppo", "ihop", "chipotle"]
+
+
+          def seed(table):
+              for restaurant in RESTAURANTS:
+                  try:
+                      table.put_item(
+                          Item={"name": restaurant, "restaurantcount": 0},
+                          ConditionExpression="attribute_not_exists(name)",
+                      )
+                  except ClientError as error:
+                      if error.response["Error"]["Code"] != "ConditionalCheckFailedException":
+                          raise
+
+
+          def unseed(table):
+              for restaurant in RESTAURANTS:
+                  try:
+                      table.delete_item(Key={"name": restaurant})
+                  except ClientError as error:
+                      if error.response["Error"]["Code"] != "ResourceNotFoundException":
+                          raise
+
+
+          def handler(event, context):
+              try:
+                  table = boto3.resource("dynamodb").Table(
+                      event["ResourceProperties"]["TableName"]
+                  )
+                  if event["RequestType"] == "Delete":
+                      unseed(table)
+                  else:
+                      seed(table)
+                  cfnresponse.send(
+                      event, context, cfnresponse.SUCCESS,
+                      {"SeededRestaurants": len(RESTAURANTS)},
+                  )
+              except Exception:
+                  print(traceback.format_exc())
+                  cfnresponse.send(
+                      event, context, cfnresponse.FAILED,
+                      {"Error": traceback.format_exc()},
+                  )
+
+  TableSeeder:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !GetAtt TableSeederFunction.Arn
+      TableName: !Ref TableName
+
+  AppInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: votingapp-runtime
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt VotingTable.Arn
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStackResource
+                  - cloudformation:SignalResource
+                Resource: !Ref AWS::StackId
+
+  AppInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref AppInstanceRole
+
+  AppInstance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - PublicRoute
+      - TableSeeder
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT20M
+        Count: "1"
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref AppInstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !GetAtt AppSecurityGroup.GroupId
+      MetadataOptions:
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-votingapp"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -x
+          INIT_EXIT=0
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource AppInstance --region ${AWS::Region} || INIT_EXIT=$?
+
+          APP_UP=0
+          if [ "$INIT_EXIT" -eq 0 ]; then
+            for i in $(seq 1 60); do
+              if curl -sf "http://127.0.0.1:${AppPort}/" > /dev/null; then
+                APP_UP=1
+                break
+              fi
+              sleep 2
+            done
+          fi
+
+          if [ "$INIT_EXIT" -eq 0 ] && [ "$APP_UP" -eq 1 ]; then
+            /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource AppInstance --region ${AWS::Region}
+          else
+            /opt/aws/bin/cfn-signal -e 1 --stack ${AWS::StackName} --resource AppInstance --region ${AWS::Region}
+          fi
+          # Force instance replacement on any app-setting change: ${AppPort} ${RepoBranch} ${TableName} ${CPUStressFactor} ${MemStressFactor}
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          default:
+            - app-setup
+        app-setup:
+          packages:
+            yum:
+              git: []
+              python3-pip: []
+          files:
+            /etc/systemd/system/votingapp.service:
+              content: |
+                [Unit]
+                Description=Voting App (Flask)
+                Wants=network-online.target
+                After=network-online.target
+
+                [Service]
+                Type=simple
+                User=ec2-user
+                WorkingDirectory=/opt/votingapp
+                EnvironmentFile=/opt/votingapp/votingapp.env
+                EnvironmentFile=/opt/votingapp/cpu-stress.env
+                EnvironmentFile=/opt/votingapp/mem-stress.env
+                ExecStart=/opt/votingapp/venv/bin/python /opt/votingapp/app.py
+                Restart=on-failure
+                RestartSec=5
+
+                [Install]
+                WantedBy=multi-user.target
+              mode: "000644"
+              owner: root
+              group: root
+            /opt/votingapp/votingapp.env:
+              content: !Sub |
+                DDB_AWS_REGION=${AWS::Region}
+                DDB_TABLE_NAME=${TableName}
+                PORT=${AppPort}
+              mode: "000644"
+              owner: root
+              group: root
+            /opt/votingapp/cpu-stress.env:
+              content: !If
+                - HasCPUStressFactor
+                - !Sub "CPUSTRESSFACTOR=${CPUStressFactor}"
+                - ""
+              mode: "000644"
+              owner: root
+              group: root
+            /opt/votingapp/mem-stress.env:
+              content: !If
+                - HasMemStressFactor
+                - !Sub "MEMSTRESSFACTOR=${MemStressFactor}"
+                - ""
+              mode: "000644"
+              owner: root
+              group: root
+          commands:
+            01_clone_repo:
+              command: !Sub |
+                if [ ! -d /opt/votingapp/.git ]; then
+                  git clone --depth 1 --branch ${RepoBranch} https://github.com/mreferre/votingapp-factory.git /opt/votingapp
+                fi
+            02_create_venv:
+              command: |
+                test -x /opt/votingapp/venv/bin/python || python3 -m venv /opt/votingapp/venv
+            03_install_requirements:
+              command: |
+                /opt/votingapp/venv/bin/pip install -r /opt/votingapp/requirements.txt
+          services:
+            systemd:
+              votingapp:
+                enabled: "true"
+                ensureRunning: "true"
+                commands: ["03_install_requirements"]
+
+Outputs:
+  AppURL:
+    Description: URL of the voting app.
+    Value: !Sub "http://${AppInstance.PublicDnsName}:${AppPort}"
+  InstanceId:
+    Description: EC2 instance running the application.
+    Value: !Ref AppInstance
+  TableName:
+    Description: DynamoDB table storing the votes.
+    Value: !Ref VotingTable

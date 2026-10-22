@@ -54,6 +54,31 @@ Remember to substitute the `CONNECTION_ARN`, `GH_USER`, `ACCOUNT_ID` and `IAM_RO
 aws apprunner create-service --cli-input-json file://apprunner_cli_input.json
 ```
 
+#### CloudFormation EC2 deployment
+
+The [cloudformation/votingapp-ec2.yaml](/cloudformation/votingapp-ec2.yaml) template deploys this application on a single EC2 instance and it is self-contained: it creates the networking (VPC, internet gateway, public subnet, route table, security group), a DynamoDB table that a custom resource initializes with the four restaurant items, the IAM roles and a t3.micro instance (Amazon Linux 2023) that installs Python, clones this repository and runs the app under `systemd`. The stack creation completes only when the application is up and answering HTTP requests (verified with `cfn-signal`) and rolls back otherwise.
+
+To deploy (requires AWS CLI credentials in the region of your choice):
+
+```
+aws cloudformation deploy \
+  --template-file cloudformation/votingapp-ec2.yaml \
+  --stack-name votingapp-ec2 \
+  --capabilities CAPABILITY_IAM
+```
+
+When the stack is complete, retrieve the application URL and start voting: 
+
+```
+aws cloudformation describe-stacks --stack-name votingapp-ec2 \
+  --query "Stacks[0].Outputs[?OutputKey=='AppURL'].OutputValue" --output text
+
+curl <AppURL>/api/outback
+curl <AppURL>/api/getvotes
+```
+
+All template parameters are optional: `TableName` (default `votingapp-restaurants`), `InstanceType` (default `t3.micro`), `AppPort` (default `8080`), `AllowedCidr` (default `0.0.0.0/0`, the CIDR range allowed to reach the application port), `RepoBranch` (default `master`) and `CPUStressFactor`/`MemStressFactor` (default empty, meaning the application defaults of `1` apply). To delete everything: `aws cloudformation delete-stack --stack-name votingapp-ec2`.
+
 #### Variables
 
 - `DDB_AWS_REGION` this variable is required and needs to be set to the region of the DynamoDB table.
