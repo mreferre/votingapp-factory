@@ -287,7 +287,7 @@ Resources:
               python3-pip: []
           files:
             /etc/systemd/system/votingapp.service:
-              content: !Sub |
+              content: |
                 [Unit]
                 Description=Voting App (Flask)
                 Wants=network-online.target
