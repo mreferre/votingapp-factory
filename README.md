@@ -9,7 +9,7 @@ The application puts and stores "votes" in an Amazon DynamoDB table. You can vot
 /api/ihop
 /api/chipotle
 ```
-In addition to vote, you can query the status by CURLing (or similar) the `/api/getvotes` API. Note that there is an ***experimental*** feature in the code to artificially consume more memory/CPU. This is available by hitting the `/api/getheavyvotes` API. The amount of artificial load is determined by two variables (`MEMSTRESSFACTOR` and `CPUSTRESSFACTOR` which default to `1`). You can tweak the amount of load by, for example, setting them to `0.1` if you want less overhead or `10` if you want more overhead. 
+In addition to vote, you can query the status by CURLing (or similar) the `/api/getvotes` API.
 
 If you hit the `/` path of the service a summary of the various APIs available is provided. This path only serves static content and does not test DynamoDB connectivity. 
 
@@ -67,7 +67,6 @@ aws apprunner create-service --cli-input-json file://apprunner_cli_input.json
 - `DDB_AWS_REGION` this variable is required and needs to be set to the region of the DynamoDB table.
 - `DDB_TABLE_NAME` this variable is optional and contains the DynamoDB table name (default: `votingapp-restaurants`)
 - `VOTES_PAGE_PASSWORD` and `FLASK_SECRET_KEY` are required together to enable the password-protected `/votes` page (see above). `FLASK_SECRET_KEY` signs the session cookie.
-- `MEMSTRESSFACTOR` and `CPUSTRESSFACTOR` are optional and governs the behaviour of the artificial load (experimental)
 - `OTEL_PYTHON_ID_GENERATOR` and `OTEL_PROPAGATORS` are required to enable the X-Ray integration
 - `OTEL_PYTHON_DISABLED_INSTRUMENTATIONS` and `OTEL_RESOURCE_ATTRIBUTES` are optional and relates to the X-Ray integration
 
@@ -77,7 +76,6 @@ This app has been created to test deployments to AWS App Runner. However, this i
 
 #### Known limitations and to-do
 
-- the `getheavyvotes` API doesn't really work as expected and it's WIP 
 - the script should ideally be turned into a CFN template with custom resources to initialize the DDB table
 - Even more ideally this could/should be all wrapped (App Runner service + DDB table) with a Copilot artifact
 - the Flask server doesn't have debug enabled. To do so add the following variable: `FLASK_ENV-development` (please note this variable is [incompatible with OpenTelemetry](https://github.com/open-telemetry/opentelemetry-python-contrib/issues/546) so the X-Ray integration won't work until this will get fixed)
