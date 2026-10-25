@@ -11,6 +11,12 @@ The application puts and stores "votes" in an Amazon DynamoDB table. You can vot
 ```
 In addition to vote, you can query the status by CURLing (or similar) the `/api/getvotes` API. Note that there is an ***experimental*** feature in the code to artificially consume more memory/CPU. This is available by hitting the `/api/getheavyvotes` API. The amount of artificial load is determined by two variables (`MEMSTRESSFACTOR` and `CPUSTRESSFACTOR` which default to `1`). You can tweak the amount of load by, for example, setting them to `0.1` if you want less overhead or `10` if you want more overhead. 
 
+#### The `/votes` web page
+
+The application also serves a password protected web page at `/votes`. It shows a responsive grid with the four restaurants and their current votes (read from DynamoDB) and lets you vote for one of them without leaving the page. There is no front-end build step: the page is made of Flask/Jinja templates (`templates/`) and plain CSS/JS (`static/`).
+
+The page is protected by a password, which is read from the `VOTES_PAGE_PASSWORD` environment variable (it is never stored in the code). Session cookies are signed with the key in `FLASK_SECRET_KEY`. **If either variable is not set the `/votes` page is disabled and returns `404`.** Only the page (and the `/votes/*` endpoints it uses) is protected: the `/api/*` endpoints above are unchanged and remain public.
+
 If you hit the `/` path of the service a summary of the various APIs available is provided. This path only serves static content and does not test DynamoDB connectivity. 
 
 This is a high level diagram of the application architecture:
@@ -58,6 +64,8 @@ aws apprunner create-service --cli-input-json file://apprunner_cli_input.json
 
 - `DDB_AWS_REGION` this variable is required and needs to be set to the region of the DynamoDB table.
 - `DDB_TABLE_NAME` this variable is optional and contains the DynamoDB table name (default: `votingapp-restaurants`)
+- `VOTES_PAGE_PASSWORD` this variable is optional and contains the password for the `/votes` page. If unset, the page is disabled (`404`).
+- `FLASK_SECRET_KEY` this variable is required to enable the `/votes` page and contains a long random string used to sign the session cookie (e.g. `python3 -c "import secrets; print(secrets.token_hex(32))"`). If unset, the page is disabled (`404`).
 - `MEMSTRESSFACTOR` and `CPUSTRESSFACTOR` are optional and governs the behaviour of the artificial load (experimental)
 - `OTEL_PYTHON_ID_GENERATOR` and `OTEL_PROPAGATORS` are required to enable the X-Ray integration
 - `OTEL_PYTHON_DISABLED_INSTRUMENTATIONS` and `OTEL_RESOURCE_ATTRIBUTES` are optional and relates to the X-Ray integration
@@ -71,9 +79,16 @@ This app has been created to test deployments to AWS App Runner. However, this i
 - the `getheavyvotes` API doesn't really work as expected and it's WIP 
 - the script should ideally be turned into a CFN template with custom resources to initialize the DDB table
 - Even more ideally this could/should be all wrapped (App Runner service + DDB table) with a Copilot artifact
-- A simple UI to vote and query the votes is in the works
 - the Flask server doesn't have debug enabled. To do so add the following variable: `FLASK_ENV-development` (please note this variable is [incompatible with OpenTelemetry](https://github.com/open-telemetry/opentelemetry-python-contrib/issues/546) so the X-Ray integration won't work until this will get fixed)
 
+
+#### Running the tests
+
+The tests exercise the `/votes` page with the Flask test client and an in-memory fake of the DynamoDB table (no AWS access needed):
+```
+pip install -r requirements.txt pytest
+python -m pytest tests
+```
 
 #### Licensing
 
