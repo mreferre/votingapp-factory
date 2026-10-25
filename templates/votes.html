@@ -1,0 +1,24 @@
+{% extends "votes_base.html" %}
+{% block title %}Votes{% endblock %}
+{% block body %}
+<header class="topbar">
+  <h1>Where should we eat?</h1>
+  <form method="post" action="{{ url_for('votes_logout') }}">
+    <button type="submit">Sign out</button>
+  </form>
+</header>
+<main>
+  <p class="muted">Pick your favourite restaurant. Counts are read from DynamoDB.</p>
+  <ul class="grid" id="votes-grid" data-csrf="{{ csrf_token }}" data-vote-url="{{ url_for('votes_vote', restaurant='__ID__') }}">
+    {% for r in restaurants %}
+    <li class="card restaurant" data-id="{{ r.id }}">
+      <h2>{{ r.label }}</h2>
+      <p class="count"><span class="number" data-count>{{ r.votes }}</span> <span class="unit">votes</span></p>
+      <button type="button" class="primary" data-vote aria-label="Vote for {{ r.label }}">Vote</button>
+    </li>
+    {% endfor %}
+  </ul>
+  <p id="status" class="muted" role="status" aria-live="polite"></p>
+</main>
+<script src="{{ url_for('static', filename='votes.js') }}" defer></script>
+{% endblock %}
