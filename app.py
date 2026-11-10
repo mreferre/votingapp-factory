@@ -1,6 +1,6 @@
 import os
 
-from flask import Flask
+from flask import Flask, abort, jsonify
 from flask_cors import CORS, cross_origin
 from random import randrange
 import simplejson as json
@@ -38,63 +38,50 @@ def readvote(restaurant):
     votes = json_response["Item"]["restaurantcount"]
     return str(votes)
 
-def updatevote(restaurant, votes):
-    ddbtable.update_item(
-        Key={
-            'name': restaurant
-        },
-        UpdateExpression='SET restaurantcount = :value',
-        ExpressionAttributeValues={
-            ':value': votes
-        },
+# Restaurants that can be voted for, in the order /api/getvotes returns them.
+RESTAURANTS = ("outback", "bucadibeppo", "ihop", "chipotle")
+
+def addvote(restaurant):
+    """Atomically add one vote and return the new total.
+
+    A single ADD update avoids the old read-then-write race, where two
+    concurrent votes could read the same count and one vote was lost.
+    """
+    response = ddbtable.update_item(
+        Key={'name': restaurant},
+        UpdateExpression='ADD restaurantcount :one',
+        ExpressionAttributeValues={':one': 1},
         ReturnValues='UPDATED_NEW'
     )
-    return str(votes)
+    return int(response["Attributes"]["restaurantcount"])
+
+def readallvotes():
+    """Read every restaurant's count in one BatchGetItem call."""
+    response = ddb.batch_get_item(
+        RequestItems={
+            ddb_table_name: {'Keys': [{'name': name} for name in RESTAURANTS]}
+        }
+    )
+    counts = {
+        item['name']: int(item['restaurantcount'])
+        for item in response['Responses'].get(ddb_table_name, [])
+    }
+    # BatchGetItem returns items in any order; keep the original response order.
+    return [{"name": name, "value": counts[name]} for name in RESTAURANTS]
 
 @app.route('/')
 def home():
     return "<h1>Welcome to the Voting App</h1><p><b>To vote, you can call the following APIs:</b></p><p>/api/outback</p><p>/api/bucadibeppo</p><p>/api/ihop</p><p>/api/chipotle</p><b>To query the votes, you can call the following APIs:</b><p>/api/getvotes</p><p>/api/getheavyvotes (this generates artificial CPU/memory load)</p>"
 
-@app.route("/api/outback")
-def outback():
-    string_votes = readvote("outback")
-    votes = int(string_votes)
-    votes += 1
-    string_new_votes = updatevote("outback", votes)
-    return string_new_votes 
-
-@app.route("/api/bucadibeppo")
-def bucadibeppo():
-    string_votes = readvote("bucadibeppo")
-    votes = int(string_votes)
-    votes += 1
-    string_new_votes = updatevote("bucadibeppo", votes)
-    return string_new_votes 
-
-@app.route("/api/ihop")
-def ihop():
-    string_votes = readvote("ihop")
-    votes = int(string_votes)
-    votes += 1
-    string_new_votes = updatevote("ihop", votes)
-    return string_new_votes 
-
-@app.route("/api/chipotle")
-def chipotle():
-    string_votes = readvote("chipotle")
-    votes = int(string_votes)
-    votes += 1
-    string_new_votes = updatevote("chipotle", votes)
-    return string_new_votes 
+@app.route("/api/<restaurant>")
+def vote(restaurant):
+    if restaurant not in RESTAURANTS:
+        abort(404)
+    return str(addvote(restaurant))
 
 @app.route("/api/getvotes")
 def getvotes():
-    string_outback = readvote("outback")
-    string_ihop = readvote("ihop")
-    string_bucadibeppo = readvote("bucadibeppo")
-    string_chipotle = readvote("chipotle")
-    string_votes = '[{"name": "outback", "value": ' + string_outback + '},' + '{"name": "bucadibeppo", "value": ' + string_bucadibeppo + '},' + '{"name": "ihop", "value": '  + string_ihop + '}, ' + '{"name": "chipotle", "value": '  + string_chipotle + '}]'
-    return string_votes
+    return jsonify(readallvotes())
 
 @app.route("/api/getheavyvotes")
 def getheavyvotes():
@@ -113,4 +100,3 @@ def getheavyvotes():
 
 if __name__ == '__main__':
    app.run(host=os.getenv('IP', '0.0.0.0'), port=int(os.getenv('PORT', 8080)))
-   app.debug =True
